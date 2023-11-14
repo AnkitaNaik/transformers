@@ -260,12 +260,24 @@ class TextGenerationPipeline(Pipeline):
                 generate_kwargs["min_length"] += prefix_length
 
         # BS x SL
-        generated_sequence = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
+        output = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
+        if ('output_scores' in generate_kwargs):
+            if generate_kwargs['output_scores']:
+                generated_sequence = output['sequences']
+                generated_sequence_score = output['sequences_scores']
+            else:
+                generated_sequence = output                
+                generated_sequence_score = None
+        else:
+            generated_sequence = output
+            generated_sequence_score = None
         out_b = generated_sequence.shape[0]
         if self.framework == "pt":
             generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])
         elif self.framework == "tf":
             generated_sequence = tf.reshape(generated_sequence, (in_b, out_b // in_b, *generated_sequence.shape[1:]))
+        if generated_sequence_score:
+            return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text, 'sequences_scores': generated_sequence_score}
         return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text}
 
     def postprocess(self, model_outputs, return_type=ReturnType.FULL_TEXT, clean_up_tokenization_spaces=True):
@@ -274,7 +286,7 @@ class TextGenerationPipeline(Pipeline):
         prompt_text = model_outputs["prompt_text"]
         generated_sequence = generated_sequence.numpy().tolist()
         records = []
-        for sequence in generated_sequence:
+        for idx, sequence in enumerate(generated_sequence):
             if return_type == ReturnType.TENSORS:
                 record = {"generated_token_ids": sequence}
             elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
@@ -302,7 +314,10 @@ class TextGenerationPipeline(Pipeline):
                 else:
                     all_text = text[prompt_length:]
 
-                record = {"generated_text": all_text}
+                if "sequences_scores" in model_outputs:
+                    record = {"generated_text": all_text, "sequences_scores": model_outputs["sequences_scores"][idx]}
+                else:
+                    record = {"generated_text": all_text}
             records.append(record)
 
         return records

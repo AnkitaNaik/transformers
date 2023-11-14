@@ -184,17 +184,30 @@ class Text2TextGenerationPipeline(Pipeline):
         generate_kwargs["min_length"] = generate_kwargs.get("min_length", self.model.config.min_length)
         generate_kwargs["max_length"] = generate_kwargs.get("max_length", self.model.config.max_length)
         self.check_inputs(input_length, generate_kwargs["min_length"], generate_kwargs["max_length"])
-        output_ids = self.model.generate(**model_inputs, **generate_kwargs)
+        output = self.model.generate(**model_inputs, **generate_kwargs)
+        if ('output_scores' in generate_kwargs):
+            if generate_kwargs['output_scores']:
+                output_ids = output['sequences']
+                sequences_scores = output['sequences_scores']
+            else:
+                output_ids = output
+                sequences_scores = None
+        else:
+            output_ids = output
+            sequences_scores = None
+
         out_b = output_ids.shape[0]
         if self.framework == "pt":
             output_ids = output_ids.reshape(in_b, out_b // in_b, *output_ids.shape[1:])
         elif self.framework == "tf":
             output_ids = tf.reshape(output_ids, (in_b, out_b // in_b, *output_ids.shape[1:]))
+        if sequences_scores:
+            return {"output_ids": output_ids, "sequences_scores": sequences_scores}
         return {"output_ids": output_ids}
 
     def postprocess(self, model_outputs, return_type=ReturnType.TEXT, clean_up_tokenization_spaces=False):
         records = []
-        for output_ids in model_outputs["output_ids"][0]:
+        for idx, output_ids in enumerate(model_outputs["output_ids"][0]):
             if return_type == ReturnType.TENSORS:
                 record = {f"{self.return_name}_token_ids": output_ids}
             elif return_type == ReturnType.TEXT:
@@ -205,7 +218,11 @@ class Text2TextGenerationPipeline(Pipeline):
                         clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                     )
                 }
-            records.append(record)
+            if "sequence_scores" in model_outputs:
+                record["sequence_scores"] = model_outputs["sequences_scores"][idx]
+                records.append(record)
+            else:
+                records(record)
         return records
 
 
