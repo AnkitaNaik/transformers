@@ -201,7 +201,7 @@ class Text2TextGenerationPipeline(Pipeline):
             output_ids = output_ids.reshape(in_b, out_b // in_b, *output_ids.shape[1:])
         elif self.framework == "tf":
             output_ids = tf.reshape(output_ids, (in_b, out_b // in_b, *output_ids.shape[1:]))
-        if sequences_scores:
+        if sequences_scores is not None:
             return {"output_ids": output_ids, "sequences_scores": sequences_scores}
         return {"output_ids": output_ids}
 

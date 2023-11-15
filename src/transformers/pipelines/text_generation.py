@@ -276,7 +276,7 @@ class TextGenerationPipeline(Pipeline):
             generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])
         elif self.framework == "tf":
             generated_sequence = tf.reshape(generated_sequence, (in_b, out_b // in_b, *generated_sequence.shape[1:]))
-        if generated_sequence_score:
+        if generated_sequence_score is not None:
             return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text, 'sequences_scores': generated_sequence_score}
         return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text}
 
